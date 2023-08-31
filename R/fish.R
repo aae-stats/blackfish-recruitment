@@ -55,16 +55,23 @@ fetch_fish <- function(recompile = FALSE) {
       ) |>
       collect() |>
       mutate(estimated_age = 0)
-    bf_1plus <- fetch_cpue(.project_list, criterion = list(var = "length_cm", lower = 8, upper = 16.5)) |>
+    bf_1plus <- fetch_cpue(.project_list, criterion = list(var = "length_cm", lower = 8, upper = 16)) |>
       filter(
         scientific_name %in% !!.species_list,
         waterbody %in% !!.waterbody_list
       ) |>
       collect() |>
       mutate(estimated_age = 1)
+    bf_ad <- fetch_cpue(.project_list, criterion = list(var = "length_cm", lower = 16, upper = Inf)) |>
+      filter(
+        scientific_name %in% !!.species_list,
+        waterbody %in% !!.waterbody_list
+      ) |>
+      collect() |>
+      mutate(estimated_age = 99)
     
     # we want to work with a single CPUE data set
-    cpue <- bind_rows(bf_0plus, bf_1plus)
+    cpue <- bind_rows(bf_0plus, bf_1plus, bf_ad)
         
     # add some site info
     site_info <- cpue |> fetch_site_info() |> collect()

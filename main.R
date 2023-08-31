@@ -28,6 +28,12 @@ refit_model <- TRUE
 # need fish catches with age information (filtered to 0+ and 1+)
 cpue <- fetch_fish(recompile = FALSE)
 
+# separate adults and add recuit_year info to juves
+cpue_ad <- cpue |> 
+  filter(estimated_age > 2)
+cpue <- cpue |> 
+  filter(estimated_age <= 2)
+
 # want flow data for all target systems and reaches
 flow <- fetch_flow(start = 1997, end = 2023, recompile = FALSE)
 
@@ -46,11 +52,51 @@ flow <- mapply(
   SIMPLIFY = FALSE
 )
 flow <- bind_rows(flow)
-cpue2 <- cpue |>
+cpue <- cpue |>
   left_join(
     flow |> select(date_formatted, waterbody, reach_no, stream_discharge_mld),
-    by = c("survey_date" == "date_formatted", "waterbody", "reach_no")
+    by = c("survey_date" = "date_formatted", "waterbody", "reach_no")
+  ) |>
+  rename(survey_flow = stream_discharge_mld) |>
+  mutate(survey_flow_std = scale(survey_flow))
+
+# flatten to a single observation per year
+cpue <- cpue |>
+  group_by(
+    id_site,
+    waterbody,
+    reach_no,
+    survey_year, 
+    gear_type,
+    scientific_name,
+    estimated_age
+  ) |>
+  summarise(
+    effort_h = sum(effort_h),
+    catch = sum(catch)
   )
+cpue_ad <- cpue_ad |>
+  group_by(
+    id_site,
+    survey_year, 
+    gear_type,
+    scientific_name
+  ) |>
+  summarise(catch = sum(catch))
+
+# include adult_ym1 catch as a predictor (species-specific)
+cpue <- cpue |> 
+  mutate(
+    recruit_year = survey_year - estimated_age,
+    recruit_year_m1 = recruit_year - 1
+  ) |>
+  left_join(
+    cpue_ad |> 
+      select(id_site, survey_year, gear_type, scientific_name, catch) |>
+      rename(adult_catch_m1 = catch),
+    by = c("id_site", "recruit_year_m1" = "survey_year", "gear_type", "scientific_name")
+  ) |>
+  mutate(adult_catch_m1 = ifelse(is.na(adult_catch_m1), 0, adult_catch_m1))
 
 # attach flow to cpue data, aligning 1+ fish with flow in the previous year
 #    (the year in which they were spawned)
@@ -58,7 +104,7 @@ cpue <- cpue |>
   mutate(reach_no = as.numeric(reach_no)) |>
   left_join(
     metrics, 
-    by = c("waterbody", "reach_no", "survey_year" = "water_year")
+    by = c("waterbody", "reach_no", "recruit_year" = "water_year")
   ) |>
   mutate(log_effort_h = log(effort_h))
 
@@ -82,7 +128,8 @@ if (refit_model) {
   mod <- brm(
     bf(
       catch ~ estimated_age +
-        survey_flow + 
+        adult_catch_m1 +
+        survey_flow_std + 
         lowflow_wateryear_std +
         poly(dailyflow_spring_std, 2) +
         poly(dailyflow_summer_std, 2) +
