@@ -1,61 +1,25 @@
 # create a system lookup to match CPUE and longnames
 waterbody_lu <- list(
   "broken_creek_r4" = list(waterbody = "Broken Creek", reach_no = 4), 
-  "broken_creek_r5" = list(waterbody = "Broken Creek", reach_no = 5), 
-  "broken_river_r1" = list(waterbody = "Broken River", reach_no = 1), 
-  "broken_river_r2" = list(waterbody = "Broken River", reach_no = 2),
-  "broken_river_r3" = list(waterbody = "Broken River", reach_no = 3), 
-  "campaspe_river_r2" = list(waterbody = "Campaspe River", reach_no = 2),
-  "campaspe_river_r3" = list(waterbody = "Campaspe River", reach_no = 3), 
-  "campaspe_river_r4" = list(waterbody = "Campaspe River", reach_no = 4), 
-  "gellibrand_river_r1" = list(waterbody = "Gellibrand River", reach_no = 1),
   "glenelg_river_r1" = list(waterbody = "Glenelg River", reach_no = 1),
   "glenelg_river_r2" = list(waterbody = "Glenelg River", reach_no = 2), 
   "glenelg_river_r3" = list(waterbody = "Glenelg River", reach_no = 3), 
   "goulburn_river_r4" = list(waterbody = "Goulburn River", reach_no = 4), 
-  "goulburn_river_r5" = list(waterbody = "Goulburn River", reach_no = 5),
-  "gunbower_creek_r1" = list(waterbody = "Gunbower Creek", reach_no = 1),
   "holland_creek_r1" = list(waterbody = "Holland Creek", reach_no = 1), 
   "hughes_creek_r1" = list(waterbody = "Hughes Creek", reach_no = 1), 
   "kiewa_river_r1" = list(waterbody = "Kiewa River", reach_no = 1), 
   "kiewaeast_river_r1" = list(waterbody = "Kiewa River East Branch", reach_no = 1),
   "kingparrot_creek_r1" = list(waterbody = "King Parrot Creek", reach_no = 1),
-  "latrobe_river_r1" = list(waterbody = "Latrobe River", reach_no = 1), 
-  "latrobe_river_r2" = list(waterbody = "Latrobe River", reach_no = 2), 
-  "lindsay_river_r1" = list(waterbody = "Lindsay River", reach_no = 1),
-  "littlemurray_river_r0" = list(waterbody = "Little Murray River", reach_no = 0),
-  "loddon_river_r2" = list(waterbody = "Loddon River", reach_no = 2), 
-  "loddon_river_r3" = list(waterbody = "Loddon River", reach_no = 3),
-  "loddon_river_r4" = list(waterbody = "Loddon River", reach_no = 4),
-  "loddon_river_r5" = list(waterbody = "Loddon River", reach_no = 5),
-  "love_creek_r1" = list(waterbody = "Love Creek", reach_no = 1),
-  "macalister_river_r1" = list(waterbody = "Macalister River", reach_no = 1),
-  "macalister_river_r2" = list(waterbody = "Macalister River", reach_no = 2),
-  "moorabool_river_r1" = list(waterbody = "Moorabool River", reach_no = 1), 
   "moorabool_river_r3" = list(waterbody = "Moorabool River", reach_no = 3), 
   "moorabool_river_r4" = list(waterbody = "Moorabool River", reach_no = 4),
-  "mullaroo_creek_r1" = list(waterbody = "Mullaroo Creek", reach_no = 1),
   "murray_river_r6" = list(waterbody = "Murray River", reach_no = 6),
-  "murray_river_r7" = list(waterbody = "Murray River", reach_no = 7),
-  "murray_river_r8" = list(waterbody = "Murray River", reach_no = 8), 
   "ovens_river_r0" = list(waterbody = "Ovens River", reach_no = 0), 
   "ovens_river_r4" = list(waterbody = "Ovens River", reach_no = 4),
   "ovens_river_r5" = list(waterbody = "Ovens River", reach_no = 5),
-  "pyramid_creek_r1" = list(waterbody = "Pyramid Creek", reach_no = 1),
   "seven_creeks_r1" = list(waterbody = "Seven Creeks", reach_no = 1),
   "seven_creeks_r2" = list(waterbody = "Seven Creeks", reach_no = 2),
   "thomson_river_r2" = list(waterbody = "Thomson River", reach_no = 2), 
-  "thomson_river_r3" = list(waterbody = "Thomson River", reach_no = 3),
-  "thomson_river_r4" = list(waterbody = "Thomson River", reach_no = 4),
-  "thomson_river_r5" = list(waterbody = "Thomson River", reach_no = 5), 
-  "thomson_river_r6" = list(waterbody = "Thomson River", reach_no = 6),
-  "wimmera_river_r2" = list(waterbody = "Wimmera River", reach_no = 2),
-  "wimmera_river_r3" = list(waterbody = "Wimmera River", reach_no = 3), 
-  "yarra_river_r2" = list(waterbody = "Yarra River", reach_no = 2), 
-  "yarra_river_r3" = list(waterbody = "Yarra River", reach_no = 3),
-  "yarra_river_r4" = list(waterbody = "Yarra River", reach_no = 4), 
-  "yarra_river_r5" = list(waterbody = "Yarra River", reach_no = 5), 
-  "yarra_river_r6" = list(waterbody = "Yarra River", reach_no = 6)
+  "thomson_river_r3" = list(waterbody = "Thomson River", reach_no = 3)
 )
 
 # wrapper function to calculate all metrics
@@ -88,10 +52,22 @@ calculate_metrics <- function(x, system, baseline = NULL, level = 0.1) {
       season = 7:18, 
       threshold = threshold
     ),
-    dailyflow_wateryear = calculate_std(
+    dailyflow_spring = calculate_std(
       x$stream_discharge_mld,
       x$date_formatted, 
-      season = 7:18, 
+      season = 9:11, 
+      fun = median
+    ) / lt_median,
+    dailyflow_summer = calculate_std(
+      x$stream_discharge_mld,
+      x$date_formatted, 
+      season = 12:15, 
+      fun = median
+    ) / lt_median,
+    dailyflow_winter = calculate_std(
+      x$stream_discharge_mld,
+      x$date_formatted, 
+      season = 6:8, 
       fun = median
     ) / lt_median,
     maxantecedent_wateryear = calculate_std(
@@ -101,16 +77,16 @@ calculate_metrics <- function(x, system, baseline = NULL, level = 0.1) {
       lag = 1, 
       fun = max
     ) / lt_median,
-    cvflow_wateryear = calculate_std(
+    cvflow_spawning = calculate_std(
       x$stream_discharge_mld,
       x$date_formatted,
-      season = 7:18, 
+      season = 10:12, 
       fun = \(x) sd(x) / mean(x)
     ),
-    temp_sepmar = calculate_std(
+    spawning_temperature = calculate_std(
       x$water_temperature_c, 
       x$date_formatted, 
-      season = 9:15, 
+      season = 10:12, 
       fun = median
     )
   )
@@ -185,76 +161,31 @@ fetch_flow <- function(start, end, recompile = FALSE) {
       flow <- qread(paste0("data/", flow_list_file))
       
     } else {
-      
+
       # list target reaches and associated flow/temp gauges
       targets <- c(
         "broken_creek_r4" = 404210,
-        "broken_creek_r5" = 404210,
-        "broken_river_r1" = 404243,
-        "broken_river_r2" = 404241,
-        "broken_river_r3" = 404224,
-        "campaspe_river_r2" = 406201,
-        "campaspe_river_r3" = 406201,
-        "campaspe_river_r3_temp" = 406278,
-        "campaspe_river_r4" = 406202,
-        "gellibrand_river_r1" = 235227,
-        "gellibrand_river_r1_temp" = 235231,
         "glenelg_river_r1" = 238210,
         "glenelg_river_r2" = 238211,
         "glenelg_river_r3" = 238206,
         "goulburn_river_r4" = 405200,
-        "goulburn_river_r5" = 405232,
-        # "gunbower_creek_r1" = NA,  # COHUNA WEIR IN data/
         "holland_creek_r1" = 404207,
         "hughes_creek_r1" = 405228,
         "kiewa_river_r1" = 402203,
         "kiewawest_river_r1" = 402223,
-        # "kiewaeast_river_r1" = NA,  # try kiewa minus kiewa west
         "kingparrot_creek_r1" = 405231,
-        "latrobe_river_r1" = 226227,
-        # "latrobe_river_r2" = 226027, ## SWING BRIDGE UNRELIABLE, USE R1 and ADD Thomson R6 flows?
-        "lindsay_river_r1" = 414215,  # could split those above Mullaroo and those below (one site looks to be on the Mullaroo)
-        "lindsay_river_r2" = 414218,  # sits above Wallawalla (backup for whole reach for now; temporary)
-        "littlemurray_river_r0" = 409399,
-        "loddon_river_r2" = 407248,  # Tullaroop Creek, add McCallums Creek to this (following gauge)
-        "loddon_river_r2b" = 407213,
-        "loddon_river_r2_temp" = 407322, ## ONLY UNTIL 2015, full data at 407203
-        "loddon_river_r3" = 407229,
-        "loddon_river_r4" = 407224,
-        "loddon_river_r4_temp" = 407323,
-        "loddon_river_r5" = 407202,
-        "love_creek_r1" = 235234,
-        "macalister_river_r1" = 225247, 
-        "macalister_river_r1_temp" = 225256,  ## ONLY UNTIL 2014
-        "macalister_river_r2" = 225247, 
-        "moorabool_river_r1" = 232204, # not a great gauge, well DS
         "moorabool_river_r3" = 232204,
         "moorabool_river_r4" = 232202,
         "moorabool_river_r4_temp" = 232242,
-        "mullaroo_creek_r1" = 414214,
-        "murray_river_swanhill" = 409204,  # backup for little murray (temporary)
         "murray_river_r6" = 409025,  # Mulwala to Tocumwal (Yarrawonga Gauge?)
-        "murray_river_r7" = 409202,  # Tocumwal gauge?
-        "murray_river_r8" = 409215,  #  (Barmah gauge?)
         "ovens_river_r0" = 403250,  # above myrtleford
         "ovens_river_r4" = 403230,  # Myrtleford to trib above ?? (check VEWH docs)
         "ovens_river_r5" = 403241,
-        "pyramid_creek_r1" = 407202,
         "seven_creeks_r1" = 405307,
         "seven_creeks_r2" = 405237,
         "thomson_river_r2" = 225231,
-        "thomson_river_r2_temp" = 225212,## WANDOCKA, DOWNSTREAM OF TARGET REACHES
+        "thomson_river_r2_temp" = 225212 ## WANDOCKA, DOWNSTREAM OF TARGET REACHES
         # "thomson_river_r3" = NA,  ## COOPERS CK FLOW IN data/
-        "thomson_river_r4" = 225231,
-        "thomson_river_r5" = 225212,
-        "thomson_river_r6" = 225232,
-        "wimmera_river_r2" = 415200,
-        "wimmera_river_r3" = 415200,
-        "yarra_river_r2" = 229212,
-        "yarra_river_r3" = 229212,
-        "yarra_river_r4" = 229419,  # Need this, but proably use Yarra Glen for MW and Spadonis for WMIS
-        "yarra_river_r5" = 229200,  # Need this (probably have Warrandyte elsewere)
-        "yarra_river_r6" = 229143   # Chandler Hwy
       )
       
       # specify location for NSW gauges (Murray River)
@@ -369,59 +300,16 @@ fetch_flow <- function(start, end, recompile = FALSE) {
       )
     
     # merge temperature data from backup gauges into main file
-    flow$loddon_river_r2$stream_discharge_mld <-
-      flow$loddon_river_r2$stream_discharge_mld +
-      flow$loddon_river_r2b$stream_discharge_mld
-    flow$loddon_river_r2$water_temperature_c <-
-      flow$loddon_river_r2_temp$water_temperature_c
-    flow$loddon_river_r2$`NA` <- NULL
-    flow$macalister_river_r1$water_temperature_c <-
-      flow$macalister_river_r1_temp$water_temperature_c
-    flow$macalister_river_r1$`NA` <- NULL
     flow$moorabool_river_r4$water_temperature_c <-
       flow$moorabool_river_r4_temp$water_temperature_c
     flow$moorabool_river_r4$`NA` <- NULL
     flow$thomson_river_r2$water_temperature_c <-
       flow$thomson_river_r2_temp$water_temperature_c
-    flow$thomson_river_r4$water_temperature_c <-
-      flow$thomson_river_r2_temp$water_temperature_c
     flow$thomson_river_r2$`NA` <- NULL
-    
-    # same, but for Gellibrand with different numbers of rows (for some reason)
-    #  TODO: update, use random gauge to fill gaps for now
-    flow$gellibrand_river_r1 <- flow$gellibrand_river_r1 |>
-      left_join(
-        flow$moorabool_river_r4 |> select(date_formatted, water_temperature_c),
-        by = "date_formatted",
-        suffix = c("", "_backup")
-      ) |>
-      mutate(water_temperature_c = ifelse(
-        is.na(water_temperature_c), 
-        water_temperature_c_backup, 
-        water_temperature_c
-      )
-      ) |>
-      select(-water_temperature_c_backup)
-    flow$love_creek_r1 <- flow$love_creek_r1 |>
-      left_join(
-        flow$gellibrand_river_r1 |> select(date_formatted, water_temperature_c),
-        by = "date_formatted"
-      ) |>
-      mutate(water_temperature_c = water_temperature_c)
-    flow$love_creek_r1$`NA` <- NULL
-    
-    # fill gaps in gauges for a few remaining gauges
-    flow$campaspe_river_r3$water_temperature_c <-
-      flow$campaspe_river_r4$water_temperature_c
-    flow$campaspe_river_r3$`NA` <- NULL
-    flow$loddon_river_r4$water_temperature_c <-
-      flow$loddon_river_r5$water_temperature_c
-    flow$loddon_river_r4$`NA` <- NULL
     
     # and remove the _temp information that is now not needed
     flow <- flow[!grepl("_temp", names(flow))]
-    flow$loddon_river_r2b <- NULL
-    
+
     # estimate flows in east branch of Kiewa by subtracting 
     #    west branch values from the DS (combined) flows
     flow$kiewaeast_river_r1 <- flow$kiewa_river_r1
@@ -438,68 +326,6 @@ fetch_flow <- function(start, end, recompile = FALSE) {
     flow$kiewaeast_river_r1$`NA` <- NULL
     flow$kiewawest_river_r1 <- NULL
     
-    # fill Latrboe R2 with values from R1
-    flow$latrobe_river_r2 <- flow$latrobe_river_r1
-    flow$latrobe_river_r2$stream_discharge_mld <-
-      flow$latrobe_river_r2$stream_discharge_mld +
-      flow$thomson_river_r6$stream_discharge_mld
-    
-    # load Yarra river data from file (gauges provided by MW)
-    yarra_all <- read_xlsx(
-      "data/flow-raw/2023 08 YArra flow data.xlsx", 
-      skip = 4,
-      col_names = c(
-        "date",
-        "discharge_229212A", "qc_229212A", "comments_229212A", # Millgrove (R2)
-        "discharge_229653A", "qc_229653A", "comments_229653A", # Yarra Grange (R3)
-        "discharge_229206A", "qc_229206A", "comments_229206A", # Yarra Glen (R4)
-        "discharge_229200B", "qc_229200B", "comments_229200B", # Warrandyte (R5)
-        "discharge_229143B", "qc_229143B", "comments_229143B" # Alphington (R6)
-      )
-    )
-    yarra_tmp <- yarra_all |>
-      mutate(date_formatted = parse_date_time(date, orders = c("ymd_HMS", "ymd_HM", "ymd")))
-    flow$yarra_river_r2 <- flow$yarra_river_r2 |>
-      left_join(
-        yarra_tmp |> 
-          select("date_formatted", "discharge_229212A"), 
-        by = "date_formatted"
-      ) |>
-      mutate(stream_discharge_mld = discharge_229212A) |>
-      select(-discharge_229212A)
-    flow$yarra_river_r3 <- flow$yarra_river_r2 |>
-      left_join(
-        yarra_tmp |> 
-          select("date_formatted", "discharge_229653A"), 
-        by = "date_formatted"
-      ) |>
-      mutate(stream_discharge_mld = discharge_229653A) |>
-      select(-discharge_229653A)
-    flow$yarra_river_r4 <- flow$yarra_river_r2 |>
-      left_join(
-        yarra_tmp |> 
-          select("date_formatted", "discharge_229206A"), 
-        by = "date_formatted"
-      ) |>
-      mutate(stream_discharge_mld = discharge_229206A) |>
-      select(-discharge_229206A)
-    flow$yarra_river_r5 <- flow$yarra_river_r2 |>
-      left_join(
-        yarra_tmp |> 
-          select("date_formatted", "discharge_229200B"), 
-        by = "date_formatted"
-      ) |>
-      mutate(stream_discharge_mld = discharge_229200B) |>
-      select(-discharge_229200B)
-    flow$yarra_river_r6 <- flow$yarra_river_r2 |>
-      left_join(
-        yarra_tmp |> 
-          select("date_formatted", "discharge_229143B"), 
-        by = "date_formatted"
-      ) |>
-      mutate(stream_discharge_mld = discharge_229143B) |>
-      select(-discharge_229143B)
-    
     # fill Thomson reach 3 from Coopers Ck flows, with other info
     #    copied from reach 2 gauge
     thomson_tmp <- read_xlsx("data/flow-raw/CoopersCk daily data_20050701-20221130.xlsx")
@@ -514,58 +340,12 @@ fetch_flow <- function(start, end, recompile = FALSE) {
       mutate(stream_discharge_mld = stream_discharge_mld_manual) |>
       select(-stream_discharge_mld_manual)
     
-    # repeat for Gunbower, but filling other info with Murray U/S from
-    #   Gunbower
-    gunbower_tmp <- read.csv("data/flow-raw/Gunbower Creek Cohuna weir_compliance data_ending 20230131.csv")
-    gunbower_tmp <- gunbower_tmp |>
-      mutate(
-        date_formatted = parse_date_time(Date, orders = c("dmy", "dmy_HMS", "ymd")),
-        stream_discharge_mld = Flow..Ml.d.
-      ) |> 
-      select(date_formatted, stream_discharge_mld)
-    flow$gunbower_creek_r1 <- flow$murray_river_r8 |>
-      left_join(gunbower_tmp, by = "date_formatted", suffix = c("", "_manual")) |>
-      mutate(stream_discharge_mld = stream_discharge_mld_manual) |>
-      select(-stream_discharge_mld_manual)
-    
-    # placeholder to replace missing discharge for Little Murray and Lindsay
-    #   (should be there, check again later)
-    # TODO: write this as a separate function
-    flow$littlemurray_river_r0 <- flow$littlemurray_river_r0 |>
-      left_join(
-        flow$murray_river_swanhill |> select(date_formatted, stream_discharge_mld),
-        by = "date_formatted",
-        suffix = c("", "_backup")
-      ) |>
-      mutate(stream_discharge_mld = stream_discharge_mld_backup / 4) |>
-      select(-stream_discharge_mld_backup)
-    flow$littlemurray_river_r0$`NA` <- NULL
-    flow$murray_river_swanhill <- NULL
-    flow$lindsay_river_r1 <- flow$lindsay_river_r1 |>
-      left_join(
-        flow$lindsay_river_r2 |> select(date_formatted, stream_discharge_mld),
-        by = "date_formatted",
-        suffix = c("", "_backup")
-      ) |>
-      mutate(stream_discharge_mld = stream_discharge_mld_backup) |>
-      select(-stream_discharge_mld_backup)
-    flow$lindsay_river_r1$`NA` <- NULL
-    flow$lindsay_river_r2 <- NULL
-    
     # and some more for the Ovens R0, Mullaroo, and Sevens R1
     #  (check whether these can be improved, particularly Sevens
     #   which might be filled with PMQ weir)
     flow$ovens_river_r0 <- flow$ovens_river_r0 |>
       left_join(
         flow$ovens_river_r4 |> select(date_formatted, stream_discharge_mld),
-        by = "date_formatted",
-        suffix = c("", "_backup")
-      ) |>
-      mutate(stream_discharge_mld = stream_discharge_mld_backup) |>
-      select(-stream_discharge_mld_backup)
-    flow$mullaroo_creek_r1 <- flow$mullaroo_creek_r1 |>
-      left_join(
-        flow$lindsay_river_r1 |> select(date_formatted, stream_discharge_mld),
         by = "date_formatted",
         suffix = c("", "_backup")
       ) |>
@@ -581,18 +361,6 @@ fetch_flow <- function(start, end, recompile = FALSE) {
       select(-stream_discharge_mld_backup)
     
     # fix up remaining gauges that have NA column instead of temperature
-    flow$broken_river_r1$water_temperature_c <-
-      flow$broken_river_r3$water_temperature_c
-    flow$broken_river_r1$`NA` <- NULL
-    flow$broken_river_r2$water_temperature_c <-
-      flow$broken_river_r3$water_temperature_c
-    flow$broken_river_r2$`NA` <- NULL
-    flow$campaspe_river_r2$water_temperature_c <-
-      flow$campaspe_river_r3$water_temperature_c
-    flow$campaspe_river_r2$`NA` <- NULL
-    flow$macalister_river_r2$water_temperature_c <-
-      flow$macalister_river_r1$water_temperature_c
-    flow$macalister_river_r2$`NA` <- NULL
     flow$ovens_river_r4$water_temperature_c <-
       flow$ovens_river_r5$water_temperature_c
     flow$ovens_river_r4$`NA` <- NULL
