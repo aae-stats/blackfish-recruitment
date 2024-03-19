@@ -33,7 +33,9 @@ plot_flow_effects <- function(x, dat, xname = NULL, rescale = NULL) {
   tmp <- tmp |>
     mutate(
       label = ifelse(x == max(x), Waterbody, NA),
-      label = ifelse(label == "Averaged", "", label)
+      label = ifelse(label == "Averaged", "", label),
+      Species = gsub("Gadopsis marmoratus", "River Blackfish", Species),
+      Species = gsub("Gadopsis bispinosus", "Two-spined Blackfish", Species)
     )
   
   # set up a line width based on whether it's an average or waterbody value
@@ -42,13 +44,14 @@ plot_flow_effects <- function(x, dat, xname = NULL, rescale = NULL) {
   
   # set up base plot, with wtaerbodies if needed
   p <-   tmp |>
+    mutate(Waterbody = gsub("Averaged", "Average effect", Waterbody)) |>
     ggplot(aes(y = predicted, x = x, col = Waterbody))
   
   # group by species
   p <- p +
     geom_line(aes(linewidth = line_width)) +
     facet_wrap( ~ Species, scales = "free") +
-    ylab("Young-of-year CPUE") +
+    ylab("Year-class strength") +
     ylim(0, NA)
   
   # add xlab is known
@@ -57,12 +60,13 @@ plot_flow_effects <- function(x, dat, xname = NULL, rescale = NULL) {
   
   # add legend if required
   p <- p + 
-    geom_label_repel(
-      aes(label = label),
-      nudge_x = 1,
-      na.rm = TRUE
-    ) +
-    theme(legend.position = "none")
+    # geom_label_repel(
+    #   aes(label = label),
+    #   nudge_x = 1,
+    #   na.rm = TRUE
+    # ) +
+    theme(legend.position = "bottom", legend.title = element_blank(), legend.text = element_text(size = 8)) +
+    guides(linewidth = "none")
   
   # return
   p
@@ -107,13 +111,17 @@ plot_flow_effects_system <- function(x, dat, metric_range, lt_vals, xname = NULL
     # set up base plot, with wtaerbodies if needed
     p[[i]] <- tmp |>
       filter(Waterbody == waterbody_list$Waterbody[i], Reach == waterbody_list$Reach[i]) |>
+      mutate(
+        Species = gsub("Gadopsis marmoratus", "River Blackfish", Species),
+        Species = gsub("Gadopsis bispinosus", "Two-spined Blackfish", Species)
+      ) |>
       ggplot(aes(y = predicted, x = x))
     
     # group by species
     p[[i]] <- p[[i]] +
       geom_line() +
       facet_wrap( ~ Species, scales = "free") +
-      ylab("Young-of-year CPUE") +
+      ylab("Year-class strength") +
       ylim(0, NA)
     
     # add xlab is known

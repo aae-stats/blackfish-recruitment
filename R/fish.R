@@ -46,7 +46,7 @@ fetch_fish <- function(recompile = FALSE) {
     cpue <- qread("data/fish-compiled.qs")
     
   } else {
-
+    
     # grab CPUE values for 0+ and 1+ fish based on length intervals
     bf_0plus <- fetch_cpue(.project_list, criterion = list(var = "length_cm", lower = 0, upper = 8)) |>
       filter(
@@ -72,13 +72,13 @@ fetch_fish <- function(recompile = FALSE) {
     
     # we want to work with a single CPUE data set
     cpue <- bind_rows(bf_0plus, bf_1plus, bf_ad)
-        
+    
     # add some site info
     site_info <- cpue |> fetch_site_info() |> collect()
     st_geometry(site_info) <- st_as_sfc(site_info$geom_pnt, crs = 4283)
     
     # can use VEWH reach table to add reach info    
-    vewh_reaches <- fetch_table("eflow_reaches_20171214", "spatial") |>
+    vewh_reaches <- fetch_table("eflow_reaches_20171214", "projects") |>
       collect()
     st_geometry(vewh_reaches) <- st_as_sfc(vewh_reaches$geom, crs = 4283)
     site_info <- site_info |>
@@ -184,7 +184,7 @@ fetch_fish <- function(recompile = FALSE) {
       mutate(waterbody_reach = paste(waterbody, reach_no, sep = " R")) |>
       filter(!waterbody_reach %in% .exclusions) |>
       select(-waterbody_reach)
-
+    
     # save this
     qsave(cpue, file = "data/fish-compiled.qs")
     
@@ -192,5 +192,104 @@ fetch_fish <- function(recompile = FALSE) {
   
   # return
   cpue
+  
+}
+
+# helper function to load blackfish data at different length thresholds to 
+#   calculate correlations among different levels
+check_correlations <- function(recompile = FALSE) {
+  
+  # list target ARI projects
+  .project_list <- c(1, 2, 4, 6, 9, 10:13, 15:50)
+  
+  # list target species and waterbodies
+  .waterbody_list <- c(
+    "Broken Creek",
+    "Glenelg River", 
+    "Goulburn River",
+    "Holland Creek",
+    "Hughes Creek",
+    "Kiewa River", 
+    "Kiewa River East Branch",
+    "King Parrot Creek", 
+    "Moorabool River",
+    "Murray River",
+    "Ovens River",
+    "Seven Creeks",
+    "Thomson River"
+  )
+  .species_list <- c(
+    "Gadopsis bispinosus",
+    "Gadopsis marmoratus"
+  )
+  
+  # list of reaches to exclude
+  .exclusions <- c(
+    "Broken Creek R5",
+    "Goulburn River R5",
+    "Moorabool River R1",
+    "Murray River R8",
+    "Thomson River R4",
+    "Thomson River R5",
+    "Thomson River R6"
+  )
+  
+  # check if data exist
+  fish_exists <- any(grepl("corr-list-compiled.qs", dir("data/")))
+  
+  # if data exist and !recompile, load saved version. Re-extract otherwise
+  if (fish_exists & !recompile) {
+    
+    # load data
+    cpue_list <- qread("data/corr-list-compiled.qs")
+    
+  } else {
+    
+    
+    # check at multiple length thresholds
+    threshold_list <- expand.grid(
+      yoy = c(7, 8, 9),
+      oneplus = c(15, 16, 18, 20)
+    )
+    
+    # work through each combo
+    cpue_list <- vector("list", length = nrow(threshold_list))
+    for (i in seq_len(nrow(threshold_list))) {
+      
+      # grab CPUE values for 0+ and 1+ fish based on length intervals
+      bf_0plus <- fetch_cpue(.project_list, criterion = list(var = "length_cm", lower = 0, upper = threshold_list$yoy[i])) |>
+        filter(
+          scientific_name %in% !!.species_list,
+          waterbody %in% !!.waterbody_list
+        ) |>
+        collect() |>
+        mutate(estimated_age = 0)
+      bf_1plus <- fetch_cpue(.project_list, criterion = list(var = "length_cm", lower = threshold_list$yoy[i], upper = threshold_list$oneplus[i])) |>
+        filter(
+          scientific_name %in% !!.species_list,
+          waterbody %in% !!.waterbody_list
+        ) |>
+        collect() |>
+        mutate(estimated_age = 1)
+      bf_ad <- fetch_cpue(.project_list, criterion = list(var = "length_cm", lower = threshold_list$oneplus[i], upper = Inf)) |>
+        filter(
+          scientific_name %in% !!.species_list,
+          waterbody %in% !!.waterbody_list
+        ) |>
+        collect() |>
+        mutate(estimated_age = 99)
+      
+      # we want to work with a single CPUE data set
+      cpue_list[[i]] <- bind_rows(bf_0plus, bf_1plus, bf_ad)
+      
+      # save to file
+      qs::qsave(cpue_list, file = "data/corr-list-compiled.qs")
+      
+    }
+    
+  }
+  
+  # return
+  cpue_list
   
 }

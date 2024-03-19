@@ -1,8 +1,8 @@
 # analysis of blackfish recruitment based on age-length estimates
 
-# Author: Jian Yen (jian.yen [at] delwp.vic.gov.au)
+# Author: Jian Yen (jian.yen [at] deeca.vic.gov.au)
 # Created: August 2023
-# Last updated: 1 September 2023
+# Last updated: 20 March 2024
 
 # load packages
 library(qs)
@@ -29,6 +29,39 @@ source("R/plotting.R")
 # flags to refit model
 refit_model <- FALSE
 
+# check correlations among different levels
+cpue_corr <- check_correlations(recompile = FALSE)
+threshold_list <- expand.grid(
+  yoy = c(7, 8, 9),
+  oneplus = c(15, 16, 18, 20)
+)
+cpue_corr <- mapply(
+  \(x, y) x |> mutate(yoy_threshold = y[1, 1], oneplus_threshold = y[1, 2]),
+  cpue_corr,
+  lapply(seq_len(nrow(threshold_list)), \(i, .x) .x[i, ], .x = threshold_list),
+  SIMPLIFY = FALSE
+)
+cpue_corr <- bind_rows(cpue_corr) |>
+  select(waterbody, id_site, id_survey, gear_type, scientific_name, estimated_age, catch, yoy_threshold, oneplus_threshold) |>
+  mutate(threshold = paste0("threshold_", paste(yoy_threshold, oneplus_threshold, sep = "_"))) |>
+  select(-yoy_threshold, -oneplus_threshold) |>
+  pivot_wider(
+    id_cols = c(waterbody, id_site, id_survey, gear_type, scientific_name, estimated_age),
+    values_from = catch,
+    names_from = threshold
+  )
+groupings <- cpue_corr |> distinct(scientific_name, estimated_age)
+corr <- vector("list", length = nrow(groupings))
+for (i in seq_len(nrow(groupings))) {
+  corr[[i]] <- cpue_corr |>
+    filter(
+      scientific_name == groupings$scientific_name[i], 
+      estimated_age == groupings$estimated_age[i]
+    ) |>
+    select(contains("threshold")) |>
+    cor()
+}
+
 # need fish catches with age information (filtered to 0+ and 1+)
 cpue <- fetch_fish(recompile = FALSE)
 
@@ -38,8 +71,48 @@ cpue_ad <- cpue |>
 cpue <- cpue |> 
   filter(estimated_age <= 2)
 
+# and remove all surveys in July-Jan from the data sets
+# cpue <- cpue |>
+#   filter(month(survey_date) %in% c(2:6))
+# cpue_ad <- cpue_ad |>
+#   filter(month(survey_date) %in% c(2:6))
+
+# work out waterbody lengths
+bf_spatial <- st_read("data/blackfish-spatial/blackfish_reaches_231222.shp")
+bf_spatial <- bf_spatial |>
+  mutate(segment_length = st_length(bf_spatial)) |>
+  group_by(waterbody) |>
+  summarise(surveyed_length_m = sum(segment_length)) |>
+  ungroup() |>
+  mutate(surveyed_length_km = surveyed_length_m / 1000)
+bf_spatial |>
+  as_tibble() |>
+  select(waterbody, surveyed_length_m, surveyed_length_km) |>
+  write.csv("outputs/tables/surveyed-waterbody-lengths.csv")
+bf_spatial |>
+  ggplot() +
+  geom_sf(aes(col = waterbody, fill = waterbody))
+# a |>
+#   ggplot()+
+#   geom_sf()
+
 # want flow data for all target systems and reaches
 flow <- fetch_flow(start = 1997, end = 2023, recompile = FALSE)
+sapply(
+  flow,
+  \(x) x |>
+    group_by(year(date_formatted)) |> 
+    summarise(annual_discharge = sum(stream_discharge_mld)) |> 
+    pull(annual_discharge) |> 
+    mean(na.rm = TRUE)
+) |>
+  as_tibble() |>
+  rename(mean_annual_discharge_ml = value) |>
+  mutate(
+    waterbody_reach = names(flow),
+    mean_annual_discharge_gl = mean_annual_discharge_ml * 0.001
+  ) |>
+  write.csv("outputs/tables/average-annual-discharge.csv")
 
 # and need metrics based on these flow data
 metrics <- mapply(calculate_metrics, flow, names(flow), SIMPLIFY = FALSE)
@@ -62,6 +135,70 @@ cpue <- cpue |>
     by = c("survey_date" = "date_formatted", "waterbody", "reach_no")
   ) |>
   rename(survey_flow = stream_discharge_mld)
+
+# summary info for reporting
+fish_summary <- cpue |>
+  group_by(waterbody, reach_no)|>
+  left_join(
+    cpue |> 
+      group_by(waterbody, reach_no, survey_year) |> 
+      summarise(no_sites = length(unique(id_site))),
+    by = c("waterbody", "reach_no", "survey_year")
+  ) |>
+  summarise(
+    average_no_sites_per_year = mean(no_sites),
+    min_no_sites_per_year = min(no_sites),
+    max_no_sites_per_year = max(no_sites),
+    years_surveyed = paste(sort(unique(survey_year)), collapse = ", "),
+    months_surveyed = paste(sort(unique(month(survey_date))), collapse = ", "),
+    gear_used = paste(sort(unique(gear_type)), collapse = ", "),
+    electro_seconds_range = paste(min(effort_s), max(effort_s), sep = "-"),
+    electro_seconds_mean = mean(effort_s)
+  )
+fish_summary_simple <- cpue |>
+  group_by(waterbody)|>
+  left_join(
+    cpue |> 
+      group_by(waterbody, survey_year) |> 
+      summarise(no_sites = length(unique(id_site))),
+    by = c("waterbody", "survey_year")
+  ) |>
+  summarise(
+    average_no_sites_per_year = mean(no_sites),
+    min_no_sites_per_year = min(no_sites),
+    max_no_sites_per_year = max(no_sites),
+    years_surveyed = paste(sort(unique(survey_year)), collapse = ", "),
+    months_surveyed = paste(sort(unique(month(survey_date))), collapse = ", "),
+    gear_used = paste(sort(unique(gear_type)), collapse = ", "),
+    electro_seconds_range = paste(min(effort_s), max(effort_s), sep = "-"),
+    electro_seconds_mean = mean(effort_s)
+  )
+
+#   summarise flow
+flow_summary <- flow |>
+  mutate(water_year = ifelse(month(date_formatted) > 6, year(date_formatted) + 1, year(date_formatted))) |>
+  group_by(waterbody, reach_no, water_year) |>
+  summarise(
+    average_discharge_mld = mean(stream_discharge_mld, na.rm = TRUE),
+    total_discharge_mld = sum(stream_discharge_mld, na.rm = TRUE),
+    average_water_temperature_c = mean(water_temperature_c, na.rm = TRUE),
+    min_water_temperature_c = min(water_temperature_c, na.rm = TRUE),
+    max_water_temperature_c = max(water_temperature_c, na.rm = TRUE)
+  )
+flow_summary_simple <- flow_summary |>
+  group_by(waterbody, reach_no) |>
+  summarise(
+    mean_annual_discharge_mld = mean(total_discharge_mld),
+    mean_water_temperature_c = mean(average_water_temperature_c),
+    mean_min_water_temperature_c = mean(min_water_temperature_c),
+    mean_max_water_temperature_c = mean(max_water_temperature_c)
+  )
+
+# write to file
+write.csv(fish_summary, file = "outputs/tables/blackfish-survey-info-by-reach.csv")
+write.csv(fish_summary_simple, file = "outputs/tables/blackfish-survey-info.csv")
+write.csv(flow_summary, file = "outputs/tables/blackfish-flow-info-by-year.csv")
+write.csv(flow_summary_simple, file = "outputs/tables/blackfish-flow-info.csv")
 
 # flatten to a single observation per year
 cpue <- cpue |>
@@ -130,6 +267,12 @@ cpue <- cpue |>
     cvflow_spawning_std = scale(cvflow_spawning),
     spawning_temperature_std = scale(spawning_temperature)
   )
+
+# save a copy of raw data for mapping
+write.csv(cpue |> distinct(id_site, waterbody, reach_no), file = "outputs/tables/bf-cpue.csv")
+
+# and plot raw data through time
+
 
 # plot flow conditions
 var_lookup <- c(
@@ -302,7 +445,7 @@ if (refit_model) {
     iter = 3000,
     warmup = 2000,
     control = list(adapt_delta = 0.9, max_treedepth = 15),
-    backend = "cmdstan",
+    backend = "rstan",
     refresh = 100,
     silent = 0,
     threads = threading(3)
@@ -371,6 +514,168 @@ ggsave(
   units = "in"
 )
 
+# plot fitted vs observed by year
+fitted_plot <- posterior_epred(mod)
+fitted_obs_plot <- tibble(
+  catch = c(mod$data$catch, apply(fitted_plot, 2, median)),
+  lower = c(
+    rep(NA, nrow(mod$data)), 
+    apply(fitted_plot, 2, quantile, probs = 0.1)
+  ),
+  upper = c(rep(NA, nrow(mod$data)),
+            apply(fitted_plot, 2, quantile, probs = 0.9)
+  ),
+  estimated_age = rep(mod$data$estimated_age, 2), 
+  species = rep(mod$data$species, 2),
+  waterbody = rep(mod$data$waterbody, 2),
+  reach_no = rep(mod$data$reach_no, 2),
+  survey_year = rep(mod$data$survey_year, 2),
+  id_site = rep(mod$data$id_site, 2)
+)
+include_subset <- fitted_obs_plot |>
+  group_by(species, waterbody, reach_no) |>
+  summarise(sum_catch = sum(catch))
+fitted_0plus_ts <- fitted_obs_plot |>
+  left_join(include_subset, by = c("species", "waterbody", "reach_no")) |>
+  mutate(category = rep(c("Observed", "Modelled"), each = nrow(mod$data))) |>
+  filter(estimated_age == 0, species == "Gadopsis bispinosus") |>
+  filter(sum_catch > 1) |>
+  group_by(waterbody, reach_no, category, survey_year) |>
+  summarise(
+    catch = sum(catch),
+    lower = sum(lower),
+    upper = sum(upper)
+  ) |>
+  ungroup() |>
+  mutate(waterbody = paste(waterbody, reach_no, sep = ": Reach ")) |>
+  ggplot(
+    aes(y = catch, x = survey_year, ymin = lower, ymax = upper, col = category)
+  ) +
+  geom_point(position = position_dodge(0.1)) +
+  geom_errorbar(position = position_dodge(0.1)) +
+  scale_color_brewer(palette = "Set2", name = "") +
+  xlab("Survey year") +
+  ylab("Catch") +
+  facet_wrap( ~ waterbody, scales = "free_y") +
+  theme(
+    legend.position = "bottom",
+    strip.text.x = element_text(size = 8)
+  )
+fitted_1plus_ts <- fitted_obs_plot |>
+  left_join(include_subset, by = c("species", "waterbody", "reach_no")) |>
+  mutate(category = rep(c("Observed", "Modelled"), each = nrow(mod$data))) |>
+  filter(estimated_age == 1, species == "Gadopsis bispinosus") |>
+  filter(sum_catch > 1) |>
+  group_by(waterbody, reach_no, category, survey_year) |>
+  summarise(
+    catch = sum(catch),
+    lower = sum(lower),
+    upper = sum(upper)
+  ) |>
+  ungroup() |>
+  mutate(waterbody = paste(waterbody, reach_no, sep = ": Reach ")) |>
+  ggplot(
+    aes(y = catch, x = survey_year, ymin = lower, ymax = upper, col = category)
+  ) +
+  geom_point(position = position_dodge(0.1)) +
+  geom_errorbar(position = position_dodge(0.1)) +
+  scale_color_brewer(palette = "Set2", name = "") +
+  xlab("Survey year") +
+  ylab("Catch") +
+  facet_wrap( ~ waterbody, scales = "free_y") +
+  theme(
+    legend.position = "bottom",
+    strip.text.x = element_text(size = 8)
+  )
+fitted_0plus_rb <- fitted_obs_plot |>
+  left_join(include_subset, by = c("species", "waterbody", "reach_no")) |>
+  mutate(category = rep(c("Observed", "Modelled"), each = nrow(mod$data))) |>
+  filter(estimated_age == 0, species == "Gadopsis marmoratus") |>
+  filter(sum_catch > 1) |>
+  group_by(waterbody, reach_no, category, survey_year) |>
+  summarise(
+    catch = sum(catch),
+    lower = sum(lower),
+    upper = sum(upper)
+  ) |>
+  ungroup() |>
+  mutate(waterbody = paste(waterbody, reach_no, sep = ": Reach ")) |>
+  ggplot(
+    aes(y = catch, x = survey_year, ymin = lower, ymax = upper, col = category)
+  ) +
+  geom_point(position = position_dodge(0.1)) +
+  geom_errorbar(position = position_dodge(0.1)) +
+  scale_color_brewer(palette = "Set2", name = "") +
+  xlab("Survey year") +
+  ylab("Catch") +
+  facet_wrap( ~ waterbody, scales = "free_y") +
+  theme(
+    legend.position = "bottom",
+    strip.text.x = element_text(size = 8)
+  )
+fitted_1plus_rb <- fitted_obs_plot |>
+  left_join(include_subset, by = c("species", "waterbody", "reach_no")) |>
+  mutate(category = rep(c("Observed", "Modelled"), each = nrow(mod$data))) |>
+  filter(estimated_age == 1, species == "Gadopsis marmoratus") |>
+  filter(sum_catch > 1) |>
+  group_by(waterbody, reach_no, category, survey_year) |>
+  summarise(
+    catch = sum(catch),
+    lower = sum(lower),
+    upper = sum(upper)
+  ) |>
+  ungroup() |>
+  mutate(waterbody = paste(waterbody, reach_no, sep = ": Reach ")) |>
+  ggplot(
+    aes(y = catch, x = survey_year, ymin = lower, ymax = upper, col = category)
+  ) +
+  geom_point(position = position_dodge(0.1)) +
+  geom_errorbar(position = position_dodge(0.1)) +
+  scale_color_brewer(palette = "Set2", name = "") +
+  xlab("Survey year") +
+  ylab("Catch") +
+  facet_wrap( ~ waterbody, scales = "free_y") +
+  theme(
+    legend.position = "bottom",
+    strip.text.x = element_text(size = 8)
+  )
+ggsave(
+  file = "outputs/figures/fitted-observed-0plus-bispinosus.png",
+  plot = fitted_0plus_ts,
+  device = ragg::agg_png,
+  width = (5/4) * 9,
+  height = 9,
+  units = "in",
+  dpi = 600
+)
+ggsave(
+  file = "outputs/figures/fitted-observed-1plus-bispinosus.png",
+  plot = fitted_1plus_ts,
+  device = ragg::agg_png,
+  width = (5/4) * 9,
+  height = 9,
+  units = "in",
+  dpi = 600
+)
+ggsave(
+  file = "outputs/figures/fitted-observed-0plus-marmoratus.png",
+  plot = fitted_0plus_rb,
+  device = ragg::agg_png,
+  width = (5/4) * 9,
+  height = 9,
+  units = "in",
+  dpi = 600
+)
+ggsave(
+  file = "outputs/figures/fitted-observed-1plus-marmoratus.png",
+  plot = fitted_1plus_rb,
+  device = ragg::agg_png,
+  width = (5/4) * 9,
+  height = 9,
+  units = "in",
+  dpi = 600
+)
+
 # calculate model fit by species
 fitted_values <- tibble(
   species = mod$data$species,
@@ -409,13 +714,16 @@ flow_vars <- c(
   "dailyflow_winter_std",
   "maxantecedent_wateryear_std",
   "cvflow_spawning_std",
-  "spawning_temperature_std"
+  "spawning_temperature_std [-8:2.5 by=0.1]"
 )
 flow_effects <- vector("list", length = length(flow_vars))
 flow_effects <- lapply(
   flow_vars,
   \(x) ggpredict(mod, terms = c(x, "species", "waterbody"), type = "random", ci.lvl = 0.5, allow_new_levels = TRUE) |> as_tibble()
 )
+
+# rename to remove the range specification from below
+flow_vars[7] <- "spawning_temperature_std"
 
 # plot these
 flow_vars_clean <- c(
@@ -437,8 +745,15 @@ rescale_values <- list(
   spawning_temp = c(mean(cpue$spawning_temperature), sd(cpue$spawning_temperature))
 )
 for (i in seq_along(flow_effects)) {
+  
+  # quick check to drop out really low values of temps (included to plot Kiewa outputs only)
+  flow_effects_tmp <- flow_effects[[i]]
+  if (i == 7)
+    flow_effects_tmp <- flow_effects_tmp |> filter(x > -5)
+  
+  # plot it
   p <- plot_flow_effects(
-    flow_effects[[i]], 
+    flow_effects_tmp, 
     dat = cpue,
     xname = flow_vars_clean[i],
     rescale = rescale_values[[i]]
@@ -459,7 +774,10 @@ min_vals <- metrics |>
   select(-water_year) |>
   group_by(waterbody, reach_no) |>
   summarise(across(everything(), .fns = list(min = min), .names = "{.col}")) |>
-  mutate(type = "min")
+  mutate(
+    type = "min",
+    spawning_temperature = ifelse(grepl("Kiewa", waterbody), 8, spawning_temperature)
+  )
 max_vals <- metrics |>
   select(-water_year) |>
   group_by(waterbody, reach_no) |>
@@ -468,7 +786,8 @@ max_vals <- metrics |>
     type = "max",
     lowflow_wateryear = ifelse(waterbody == "Holland Creek", 10, lowflow_wateryear),
     lowflow_wateryear = ifelse(waterbody == "Glenelg River" & reach_no == 1, 10, lowflow_wateryear),
-    lowflow_wateryear = ifelse(waterbody == "Moorabool River" & reach_no == 4, 10, lowflow_wateryear)
+    lowflow_wateryear = ifelse(waterbody == "Moorabool River" & reach_no == 4, 10, lowflow_wateryear),
+    spawning_temperature = ifelse(grepl("Kiewa", waterbody), 13, spawning_temperature)
   )
 metrics_range <- bind_rows(min_vals, max_vals)
 
@@ -616,9 +935,3 @@ newdat |>
     na.rm = TRUE
   ) +
   theme(legend.position = "none")
-
-# TODO: tidy labels, repeat for G bispinosus
-
-# add forest plots for flow effects (maybe harder if quadratic)
-
-# add forest plots for variance terms (to work out where we need to focus effort)
