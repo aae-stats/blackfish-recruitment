@@ -28,6 +28,7 @@ source("R/plotting.R")
 
 # flags to refit model
 refit_model <- FALSE
+rerun_diagnostics <- FALSE
 
 # check correlations among different levels
 cpue_corr <- check_correlations(recompile = FALSE)
@@ -60,7 +61,19 @@ for (i in seq_len(nrow(groupings))) {
     ) |>
     select(contains("threshold")) |>
     cor()
+  write.csv(
+    corr[[i]],
+    paste0(
+      "outputs/tables/corr-", 
+      paste(
+        tolower(gsub(" ", "_", groupings$scientific_name[i])),
+        groupings$estimated_age[i], sep = "-age"
+      ),
+      ".csv"
+    )
+  )
 }
+
 
 # need fish catches with age information (filtered to 0+ and 1+)
 cpue <- fetch_fish(recompile = FALSE)
@@ -70,12 +83,6 @@ cpue_ad <- cpue |>
   filter(estimated_age > 2)
 cpue <- cpue |> 
   filter(estimated_age <= 2)
-
-# and remove all surveys in July-Jan from the data sets
-# cpue <- cpue |>
-#   filter(month(survey_date) %in% c(2:6))
-# cpue_ad <- cpue_ad |>
-#   filter(month(survey_date) %in% c(2:6))
 
 # work out waterbody lengths
 bf_spatial <- st_read("data/blackfish-spatial/blackfish_reaches_231222.shp")
@@ -89,12 +96,6 @@ bf_spatial |>
   as_tibble() |>
   select(waterbody, surveyed_length_m, surveyed_length_km) |>
   write.csv("outputs/tables/surveyed-waterbody-lengths.csv")
-bf_spatial |>
-  ggplot() +
-  geom_sf(aes(col = waterbody, fill = waterbody))
-# a |>
-#   ggplot()+
-#   geom_sf()
 
 # want flow data for all target systems and reaches
 flow <- fetch_flow(start = 1997, end = 2023, recompile = FALSE)
@@ -270,9 +271,6 @@ cpue <- cpue |>
 
 # save a copy of raw data for mapping
 write.csv(cpue |> distinct(id_site, waterbody, reach_no), file = "outputs/tables/bf-cpue.csv")
-
-# and plot raw data through time
-
 
 # plot flow conditions
 var_lookup <- c(
@@ -462,57 +460,59 @@ if (refit_model) {
 }
 
 # run diagnostics
-pp_vals <- pp_check(mod, type = "hist")
-pp_max <- pp_check(mod, group = "species", type = "stat", stat = "max")
-pp_pzero_grouped <- pp_check(mod, group = "species", type = "stat_grouped", stat = \(x) mean(x == 0))
-rhat <- brms::rhat(mod)
-neff <- brms::neff_ratio(mod)
-standard_diag <- tibble(
-  stat = c(rep("Rhat", length(rhat)), rep("Neff ratio", length(neff))),
-  par = c(names(rhat), names(neff)),
-  value = c(rhat, neff)
-) |>
-  ggplot(aes(x = value)) +
-  geom_histogram() +
-  xlab("Value") +
-  ylab("Count") +
-  facet_wrap( ~ stat, scales = "free")
-ggsave(
-  filename = "outputs/figures/pp-hist.png",
-  plot = pp_vals + scale_x_log10(),
-  device = agg_png,
-  width = 6,
-  height = 6,
-  dpi = 600,
-  units = "in"
-)
-ggsave(
-  filename = "outputs/figures/pp-max.png",
-  plot = pp_max,
-  device = agg_png,
-  width = 6,
-  height = 6,
-  dpi = 600,
-  units = "in"
-)
-ggsave(
-  filename = "outputs/figures/pp-pzero.png",
-  plot = pp_pzero_grouped,
-  device = agg_png,
-  width = 6,
-  height = 6,
-  dpi = 600,
-  units = "in"
-)
-ggsave(
-  filename = "outputs/figures/diagnostics.png",
-  plot = standard_diag,
-  device = agg_png,
-  width = 6,
-  height = 6,
-  dpi = 600,
-  units = "in"
-)
+if (rerun_diagnostics) {
+  pp_vals <- pp_check(mod, type = "hist")
+  pp_max <- pp_check(mod, group = "species", type = "stat", stat = "max")
+  pp_pzero_grouped <- pp_check(mod, group = "species", type = "stat_grouped", stat = \(x) mean(x == 0))
+  rhat <- brms::rhat(mod)
+  neff <- brms::neff_ratio(mod)
+  standard_diag <- tibble(
+    stat = c(rep("Rhat", length(rhat)), rep("Neff ratio", length(neff))),
+    par = c(names(rhat), names(neff)),
+    value = c(rhat, neff)
+  ) |>
+    ggplot(aes(x = value)) +
+    geom_histogram() +
+    xlab("Value") +
+    ylab("Count") +
+    facet_wrap( ~ stat, scales = "free")
+  ggsave(
+    filename = "outputs/figures/pp-hist.png",
+    plot = pp_vals + scale_x_log10(),
+    device = agg_png,
+    width = 6,
+    height = 6,
+    dpi = 600,
+    units = "in"
+  )
+  ggsave(
+    filename = "outputs/figures/pp-max.png",
+    plot = pp_max,
+    device = agg_png,
+    width = 6,
+    height = 6,
+    dpi = 600,
+    units = "in"
+  )
+  ggsave(
+    filename = "outputs/figures/pp-pzero.png",
+    plot = pp_pzero_grouped,
+    device = agg_png,
+    width = 6,
+    height = 6,
+    dpi = 600,
+    units = "in"
+  )
+  ggsave(
+    filename = "outputs/figures/diagnostics.png",
+    plot = standard_diag,
+    device = agg_png,
+    width = 6,
+    height = 6,
+    dpi = 600,
+    units = "in"
+  )
+}
 
 # plot fitted vs observed by year
 fitted_plot <- posterior_epred(mod)
@@ -873,65 +873,3 @@ for (i in seq_along(all_systems)) {
   )
   
 }
-
-# extract YCS/recruitment estimates (work out which this is)
-# plot recruitment
-newdat <- cpue |>
-  group_by(waterbody, reach_no, survey_year, species) |>
-  summarise(across(contains("_std"), ~median(.x))) |>
-  mutate(
-    recruit_year = survey_year,
-    log_effort_h = log(0.2),
-    gear_type = "EFB",
-    id_site = NA,
-    estimated_age = 0,
-    waterbody_species = factor(paste(waterbody, species, sep = "_sp")),
-    survey_year_species = factor(paste(survey_year, species, sep = "_sp")),
-    recruit_year_species = factor(paste(recruit_year, species, sep = "_sp")),
-    year_waterbody_species = factor(paste(recruit_year, waterbody, species, sep = "yrsp")),
-    year_waterbody_reach_species = factor(paste(recruit_year, waterbody, reach_no, species, sep = "yrrchsp")),
-    waterbody_reach = factor(paste(waterbody, reach_no, sep = "_r")),
-    waterbody_reach_species = factor(paste(waterbody_reach, species, sep = "_sp")),
-    id_site_species = NA,
-    gear_type_species = paste(gear_type, species, sep = "_sp")
-  )
-
-test <- posterior_predict(mod, newdata = newdat, allow_new_levels = TRUE)
-newdat <- newdat |>
-  ungroup() |>
-  mutate(
-    value = apply(test, 2, mean),
-    lower = value - apply(test, 2, sd),
-    upper = value + apply(test, 2, sd),
-    lower = ifelse(lower < 0, 0, lower)
-  )
-
-include <- cpue |>
-  group_by(waterbody, species) |>
-  summarise(catch = sum(catch))
-reach_list <- cpue |>
-  group_by(waterbody, reach_no) |>
-  summarise(min_year = min(survey_year))
-newdat |>
-  filter(species == "Gadopsis marmoratus") |>
-  left_join(include, by = c("species", "waterbody")) |>
-  filter(catch > 0) |>
-  left_join(reach_list, by = c("waterbody", "reach_no")) |>
-  mutate(
-    reach_no = paste0("Reach ", reach_no),
-    label = ifelse(survey_year == min_year, reach_no, NA)
-  ) |>
-  ggplot(aes(
-    x = survey_year, y = value, 
-    ymin = lower, ymax = upper,
-    col = reach_no,
-    )) +
-  geom_point(position = position_dodge(0.5)) +
-  geom_errorbar(position = position_dodge(0.5)) +
-  facet_wrap( ~ waterbody, scales = "free_y") +
-  geom_label_repel(
-    aes(label = label),
-    nudge_x = -2,
-    na.rm = TRUE
-  ) +
-  theme(legend.position = "none")
